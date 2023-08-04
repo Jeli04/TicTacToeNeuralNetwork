@@ -35,11 +35,14 @@ class MonteCarloPolicy(Policy):
         if np.random.rand() < epsilon:
             return np.random.choice(self.env.get_possible_actions(), size=1, replace=False)
         else:
-            return np.argmax(player.predict(state)) # returns the highest predicted Q_value
+            res = np.argmax(player.predict(state)) # returns the highest predicted Q_value
+            print(res)
+            return res
 
     def step(self, state, player):
         # replace this with greedy epsilon
-        state.update_board(self.epsilon_greedy(state.get_current_state(), player))
+        state.update_board([self.epsilon_greedy(state.get_current_state(), player)])
+        print(state.get_current_state())
         return state.get_current_state(), state.check_winner()
     
     # TRAJECTOREIS ARE ALREADY COMPLETED MOVES NOT FUTURE POSSIBLE MOVES
@@ -65,8 +68,8 @@ class MonteCarloPolicy(Policy):
         p1_values = []
         p2_values = []
         for i in range(len(states)):
-            if i % 2 == 0: p1_values.append(self.state_to_value[states[i]])
-            else: p2_values.append(self.state_to_value[states[i]])
+            if i % 2 == 0: p1_values.append(self.state_to_value[tuple(states[i])])
+            else: p2_values.append(self.state_to_value[tuple(states[i])])
         return p1_values, p2_values
     
     def train(self, episodes):
