@@ -6,7 +6,7 @@ class TicTacToe:
         self.turn = 1
 
     def get_current_state(self):
-        return self.board.copy()
+        return self.board
     
     def get_possible_actions(self):
         return np.where(self.board == 0)[0]
@@ -15,11 +15,11 @@ class TicTacToe:
         if self.turn % 2 == 1:
             # player 1 move 
             new_board = self.board.copy()
-            new_board[action[0]] = 1
+            new_board[action] = 1
         else:
             # player 2 move
             new_board = self.board.copy()
-            new_board[action[0]] = -1
+            new_board[action] = -1
         return new_board
     
     def get_turn(self):
@@ -28,10 +28,10 @@ class TicTacToe:
     def update_board(self, action):
         if self.turn % 2 == 1:
             # player 1 move 
-            self.board[action[0]] = 1
+            self.board[action] = 1
         else:
             # player 2 move
-            self.board[action[0]] = -1
+            self.board[action] = -1
         self.turn += 1
 
     def check_winner(self, board=None):
