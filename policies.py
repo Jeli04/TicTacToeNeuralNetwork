@@ -4,6 +4,8 @@ from torch.autograd import Variable
 import model as m
 import torch
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 class Policy:
     def __init__(self, env, model = None):
         self.env = env
@@ -21,21 +23,20 @@ class RandomPlayer(Policy):
 
     def step(self, game):
         game.update_board(np.random.choice(game.get_possible_actions(), size=1, replace=False))
-        return game.get_current_state()
+        return game.get_current_state(), 0
 
 class NeuralNetworkMonteCarloPolicy(Policy):
-    def __init__(self, env, gamma, p1, p2 = None):
+    def __init__(self, env, gamma, model):
         super().__init__(env)
-        self.p1 = p1
-        if p2 != None: self.p2 = p2
-        else: self.p2 = RandomPlayer()
+        self.model = model
         self.env = env
         self.gamma = gamma
         self.action_to_value = {}
+        self.action_visits = {}
         self.action_to_monte_carlo_value= {}
+        
 
-
-    def step(self, game_state, player):
+    def step(self, game_state):
         """
             uses the nerual network to predict the value of each possible action
             returns the best action and the value of that action
@@ -43,224 +44,182 @@ class NeuralNetworkMonteCarloPolicy(Policy):
         best_value = None
         best_action = None
         for action in game_state.get_possible_actions():
-            action_value = player.predict(game_state.get_possible_afterstate(action))
+            # print("action: ", game_state.get_possible_afterstate(action).grad_fn)
+            action_value = self.model(game_state.get_possible_afterstate(action))
+            # print("action: ", action_value)
+            # print(action_value.grad_fn)
             # print("action value: ", action_value.item())
             if best_value == None or action_value > best_value:
                 best_action = action
                 best_value = action_value
+        # print(game_state.get_possible_afterstate(best_action).tolist())
+        
+        afterstate = game_state.get_possible_afterstate(best_action)
+        # if self.action_visits.get(tuple(afterstate.tolist())) == None:
+        #     print("Not in dict")
+        n_visits = self.action_visits.get(tuple(afterstate.tolist()), 0) + 1
+        self.action_visits[tuple(afterstate.tolist())] = n_visits
 
-        # print("best action: ", best_action)
+        # print("best action grad: ", best_action.grad)
         game_state.update_board(action)
-        return game_state.get_possible_afterstate(best_action), best_value 
+        return afterstate, best_value 
 
 
     def calculate_monte_carlo_values(self, actions, max_reward):
         """
             gets the monte carlo values for all actions in the game
         """
-        N = len(actions)
-        for i in range(len(actions)):
-            monte_carlo_value = 0
-            reward = 0
-            if i == len(actions) - 1:reward = max_reward
-            if i % 2 == 1: monte_carlo_value = (reward + (self.gamma * -max_reward))/ N
-            else: monte_carlo_value = (reward + (self.gamma * max_reward))/ N
+        player_mct = []
+        G = 0
+        i = 0
+        for action in actions:
+            N = self.action_visits[tuple(action.tolist())]
+            G = max_reward + self.gamma * G
+            old_value = None
+            for a in self.action_to_monte_carlo_value:
+                if torch.all(a.eq(action)):
+                    # print("exists")
+                    old_value = self.action_to_monte_carlo_value[a]
+                    self.action_to_monte_carlo_value[a] = torch.tensor([old_value + ((G-old_value)/N)], dtype=torch.float64)
+                    value = self.action_to_monte_carlo_value[a]
+                    break
 
-            if actions[i] not in self.action_to_value: 
-                self.action_to_monte_carlo_value[actions[i]] = monte_carlo_value
-            else:
-                self.action_to_monte_carlo_value[actions[i]] += monte_carlo_value
+            if old_value == None:
+                self.action_to_monte_carlo_value[action] = torch.tensor([G/N], dtype=torch.float64)
+                value = self.action_to_monte_carlo_value[action]
+            # if action not in self.action_to_value: 
+            #     # print(action)
+            #     self.action_to_monte_carlo_value[action] = torch.tensor([G/N], dtype=torch.float64)
+            # else:
+            #     print("exists")
+            #     old_value = self.action_to_monte_carlo_value[action]
+            #     self.action_to_monte_carlo_value[action] = torch.tensor([old_value + ((G-old_value)/N)], dtype=torch.float64)
+            
+            player_mct.append(value)
 
+        return player_mct
+    
 
     def train(self, episodes, lr):
         """
             performs episodes number of games and updates the neural network after each episode 
             based on the monte carlo values of each action
         """
-        optimizer1 = torch.optim.Adam(self.p1.parameters(), lr=lr)
-        optimizer2 = torch.optim.Adam(self.p2.parameters(), lr=lr)
+
+        """
+            Move training into its file
+            Modify the function to check if p2 is a model or not
+            Conduct training model vs random and model vs model
+        """
+
+
+
+        # print("Before training")
+        # for p in self.model.parameters():
+        #     print(p)
+        randomPlayer = RandomPlayer()
+        optimizer1 = torch.optim.SGD(self.model.parameters(), lr=lr)
+        optimizer2 = torch.optim.SGD(self.p2.parameters(), lr=lr)
+        loss_fn = nn.MSELoss()
+        p1_wins = 0
+        p2_wins = 0
+        draws = 0
 
         for episode in range(episodes):
+            afterstates = []
             while True:
                 # player 1's turn
-                afterstate, value = self.step(self.env, self.p1)
+                afterstate, value = self.step(self.env, self.model)
                 self.action_to_value[tuple(afterstate)] = value # stores the value of each action
+                afterstates.append(afterstate)
+                # print(self.env.get_current_state())
                 if self.env.check_winner() != None: 
                     reward = self.env.check_winner()
+                    # print(self.env.get_current_state())
                     # print("Game over")
                     break
 
                 # player 2's turn
-                afterstate, value = self.step(self.env, self.p2)
+                # afterstate, value = self.step(self.env, self.p2)
+                afterstate = randomPlayer.step(self.env)
                 self.action_to_value[tuple(afterstate)] = value # stores the value of each action
+                afterstates.append(afterstate)
+                # print(self.env.get_current_state())
                 if self.env.check_winner() != None: 
                     reward = self.env.check_winner()
+                    # print(self.env.get_current_state())
                     # print("Game over")
                     break
-            
+
+            if reward == 1:
+                p1_wins+=1
+            elif reward == -1:
+                p2_wins+=1
+            else:
+                draws+=1
+                
             # print("action to value: ", self.action_to_value)
             p1_values, p2_values = self.split_actions_values(self.action_to_value)
-            self.calculate_monte_carlo_values(p1_values, reward)
-            self.calculate_monte_carlo_values(p2_values, reward)
-            p1_mct_values, p2_mct_values = self.split_actions_values(self.action_to_monte_carlo_value)
-            self.update(p1_values, p1_mct_values, optimizer1)    # update player 1 
-            self.update(p2_values, p2_mct_values, optimizer2)    # update player 2
+            # self.calculate_monte_carlo_values(p1_values, reward)
+            # self.calculate_monte_carlo_values(p2_values, reward)
+            # p1_mct_values, p2_mct_values = self.split_actions_values(self.action_to_monte_carlo_value)
+            p1_mct_values, p2_mct_values = self.calculate_monte_carlo_values(afterstates, reward)
+            # print(p1_values)
+            # print(p1_mct_values)
+
+            p1_values_tensor = torch.cat(p1_values)
+            p1_mct_values_tensor = torch.cat(p1_mct_values)
+            self.update(p1_values_tensor, p1_mct_values_tensor, optimizer1, loss_fn)
+
+            # p2_values_tensor = torch.cat(p2_values)
+            # p2_mct_values_tensor = torch.cat(p2_mct_values)
+            # self.update(p2_values_tensor, p2_mct_values_tensor, optimizer2, loss_fn)
+
             self.env.reset()  # reset the board
+            self.action_to_value.clear()
+            # self.action_to_monte_carlo_value.clear()
+
+            # for p in self.model.parameters():
+            #     print(p)
+
+        print(len(self.action_to_monte_carlo_value))
+        print(self.action_to_monte_carlo_value)
+
+        print("Player 1 wins: ", p1_wins)
+        print("Player 2 wins: ", p2_wins)
+        print("Draws: ", draws)
 
     def split_actions_values(self, set):
         """
             Helper function for spliing the action_to_value sets 
             between player 1 and player 2
         """
-        p1_values = []
-        p2_values = []
+        values = []
         for i, element in enumerate(set):
             # print("element: ", set[element].item())
-            if i % 2 == 0: p1_values.append(set[element].item())
-            else: p2_values.append(set[element].item())
-        return p1_values, p2_values
+            # print(set[element].grad)    # GRAD IS NTO BEING TRACKED INSIDE THE SET
+            values.append(set[element])
+        return values
+            
 
-    def update(self, values, monte_carlo_values, optimizer):
+    def update(self, values, monte_carlo_values, optimizer, loss_fn, epoch_loss):
         """
             Updates the weights and biases of the neural network
             calculates the loss based on NN values and monte carlo values
             performs back progagation to update the weights and biases
         """
-        loss = torch.mean((torch.tensor(values) - torch.tensor(monte_carlo_values))**2)  # perform mean squared error
-        loss = Variable(loss, requires_grad=True)
-        optimizer.zero_grad()  # zero the gradients
+        loss = loss_fn(values, monte_carlo_values) # perform mean squared error        # print("loss: ", loss.item())
+        epoch_loss += loss.item()
         loss.backward()  # perform back propagation
+        # print("loss: ", loss.item())
         optimizer.step()  # update the weights and biases
+        optimizer.zero_grad()  # zero the gradients
 
-        # update weights 
-        # TD_error = sum(values-reward)
-        # self.weights += self.lr * TD_error
+        self.action_to_monte_carlo_value.clear()
+        self.action_visits.clear()
 
+        return epoch_loss
 
-    # def sample(self, state, player, epsilon=0):
-    #     best_value = 0
-    #     best_action = None
-    #     for action in self.env.get_possible_actions():
-    #         action_value = np.argmax(player.predict(state))
-    #         if action_value > best_value:
-    #             best_action = action
-    #             best_value = action_value
-
-    #     return best_action, best_value 
-
-    # def step(self, player):
-    #     print("State", self.env.get_current_state())
-
-    #     self.env.update_board([self.sample(self.env.get_current_state(), player)])
-    #     return self.env.get_current_state(), self.env.check_winner()
-    
-    # # TRAJECTOREIS ARE ALREADY COMPLETED MOVES NOT FUTURE POSSIBLE MOVES
-    # def value_trajectories(self, actions, max_reward):
-    #     # estimate all completed actions to use value the state with Monte Carlo
-    #     N = len(actions)
-    #     for i in range(len(actions)):
-    #         monte_carlo_value = 0
-    #         reward = 0
-    #         if i == len(actions) - 1:reward = max_reward
-    #         if i % 2 == 1: monte_carlo_value = (reward + (self.gamma * -max_reward))/ N
-    #         else: monte_carlo_value = (reward + (self.gamma * max_reward))/ N
-
-    #         if tuple(actions[i]) not in self.state_to_value: 
-    #             self.state_to_value[tuple(actions[i])] = monte_carlo_value
-    #         else:
-    #             self.state_to_value[tuple(actions[i])] += monte_carlo_value
-
-    #     # print(self.state_to_value)
-
-    # # splits the states into player 1 and player 2 states
-    # def split_states(self, states):
-    #     p1_values = []
-    #     p2_values = []
-    #     for i in range(len(states)):
-    #         if i % 2 == 0: p1_values.append(self.state_to_value[tuple(states[i])])
-    #         else: p2_values.append(self.state_to_value[tuple(states[i])])
-    #     return p1_values, p2_values
-    
-    # def train(self, episodes):
-    #     for _ in range(episodes):
-    #         all_states = []
-
-    #         while True:
-    #             # Player 1
-    #             state, reward = self.step(self.p1)
-    #             print("State after update", self.env.get_current_state())
-
-    #             all_states.append(state)
-
-    #             if reward != None:
-    #                 break
-
-    #             # Player 2
-    #             state, reward = self.step(self.env, self.p2)
-    #             all_states.append(state)
-
-    #             if reward != None:
-    #                 break
-
-    #         self.value_trajectories(all_states, reward) # updates the values with monte carlo
-    #         p1_values, p2_values = self.split_states(all_states) # splits the states into player 1 and player 2 states
-    #         self.p1.update(p1_values, reward) # updates the weights and biases for player 1
-    #         self.p2.update(p2_values, reward) # updates the weights and biases for player 2
-    #         self.env.reset()
-
-
-# class NeuralNetworkPolicy():
-#     def __init__(self, steps, n_games, eval_ter):
-#         self.steps = steps
-#         self.n_games = n_games
-#         self.eval_ter = eval_ter
-
-#     def train(self, env, p1, p2):
-#         # remove later 
-#         p1 = model(9, 0.001)    # layers, lr
-#         p2 = RandomPlayer() 
-
-#         for i in range(self.steps):
-#             # play n_games
-#             for j in range(self.n_games):
-#                 # play a game
-#                 complete = False
-#                 while not complete:
-#                     # player 1 move
-#                     p1_action = action(env)
-#                     env.update_board(p1_action) # update the board should be in action 
-
-#                     p1_reward = env.check_winner()
-#                     if p1_reward != None:
-#                         complete = True
-#                         # reward the winner
-#                         if p1_reward == 1:
-#                             # update based on player 1 win 
-#                             pass
-#                         elif p1_reward == 0:
-#                             # update based on draw
-#                             pass
-#                         else: 
-#                             # update based on player 2 loss
-#                             pass
-
-#                         # update weights and biases
-
-#                     p2_action = p2.action(env)
-#                     p1_reward = env.check_winner()
-#                     if p1_reward != None:
-#                         complete = True
-#                         # reward the winner
-#                         if p1_reward == 1:
-#                             # update based on player 1 win 
-#                             pass
-#                         elif p1_reward == 0:
-#                             # update based on draw
-#                             pass
-#                         else: 
-#                             # update based on player 2 loss
-#                             pass
-#                         # update weights and biases
 
 #             # evaluate the policy
 #             if i % self.eval_ter == 0:
