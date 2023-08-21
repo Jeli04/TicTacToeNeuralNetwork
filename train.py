@@ -4,7 +4,7 @@ import TicTacToe as game
 from torch import nn
 from model import NeuralNetwork as model
 
-def train(episodes, lr, game, p1, p2):
+def train(episodes, evaluations, lr, game, p1, p2):
     """
         performs episodes number of games and updates the neural network after each episode 
         based on the monte carlo values of each action
@@ -74,7 +74,7 @@ def train(episodes, lr, game, p1, p2):
         # print(p1_mct_values)
         # print("\n")
 
-        if episode % 100 == 0:
+        if episode % evaluations == 0:
             print("Reward", reward)
             p1_values_tensor = torch.cat(p1_values)
             # p1_mct_values_tensor = torch.cat(p1_mct_values)
@@ -88,7 +88,7 @@ def train(episodes, lr, game, p1, p2):
         if p2_is_model:
             p2_values = p2.split_actions_values(p2.action_to_value)
             p2_mct_values = p2.calculate_monte_carlo_values(p2_afterstates, reward)
-            if episode % 100 == 0:
+            if episode % evaluations == 0:
                 p2_values_tensor = torch.cat(p2_values)
                 p2_mct_values_tensor = torch.cat(p2_mct_values)
                 p2.update(p2_values_tensor, p2_mct_values_tensor, optimizer2, loss_fn, epoch_loss)
@@ -96,7 +96,7 @@ def train(episodes, lr, game, p1, p2):
        
         game.reset()  # reset the board
 
-        if episode % 100 == 0 and episode != 0:
+        if episode % evaluations == 0 and episode != 0:
             print("episode = %4d loss = %0.4f" % (episode, epoch_loss/100))
             # print("Player 1 wins: ", p1_wins)
             # print("Player 2 wins: ", p2_wins)
@@ -117,6 +117,14 @@ def train(episodes, lr, game, p1, p2):
             print(f'Layer: {layer_name}, Weights: {weights}')
 
 
+    # save the model and its weights 
+    torch.save(p1.model.state_dict(), "models/p1_parameters")
+    torch.save(p1.model, "models/p1") # saves the entire model
+    if p2_is_model: 
+        torch.save(p2.model.state_dict(), "models/p2_parameters")
+        torch.save(p2.model, "models/p2") # saves the entire model
+
+
 lr = 0.001
 g = game.TicTacToe()
-train(episodes=10000, lr=lr, game=g, p1=policies.NeuralNetworkMonteCarloPolicy(g, 0.9, model(9, lr)), p2=policies.RandomPlayer())
+train(episodes=10000, evaluations=100, lr=lr, game=g, p1=policies.NeuralNetworkMonteCarloPolicy(g, 0.9, model(9, lr)), p2=policies.RandomPlayer())
