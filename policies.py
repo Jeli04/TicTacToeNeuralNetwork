@@ -61,7 +61,7 @@ class NeuralNetworkMonteCarloPolicy(Policy):
         self.action_visits[tuple(afterstate.tolist())] = n_visits
 
         # print("best action grad: ", best_action.grad)
-        game_state.update_board(action)
+        game_state.update_board(best_action)
         return afterstate, best_value 
 
 
@@ -72,9 +72,15 @@ class NeuralNetworkMonteCarloPolicy(Policy):
         player_mct = []
         G = 0
         i = 0
-        for action in actions:
+        # for action in actions:
+
+        for index, action in enumerate(reversed(actions)):
             N = self.action_visits[tuple(action.tolist())]
-            G = max_reward + self.gamma * G
+            if index == 0: reward = max_reward
+            else: reward = 0
+            G = reward + self.gamma * G
+            # G = max_reward + self.gamma * G
+
             old_value = None
             for a in self.action_to_monte_carlo_value:
                 if torch.all(a.eq(action)):
@@ -87,14 +93,7 @@ class NeuralNetworkMonteCarloPolicy(Policy):
             if old_value == None:
                 self.action_to_monte_carlo_value[action] = torch.tensor([G/N], dtype=torch.float64)
                 value = self.action_to_monte_carlo_value[action]
-            # if action not in self.action_to_value: 
-            #     # print(action)
-            #     self.action_to_monte_carlo_value[action] = torch.tensor([G/N], dtype=torch.float64)
-            # else:
-            #     print("exists")
-            #     old_value = self.action_to_monte_carlo_value[action]
-            #     self.action_to_monte_carlo_value[action] = torch.tensor([old_value + ((G-old_value)/N)], dtype=torch.float64)
-            
+
             player_mct.append(value)
 
         return player_mct
@@ -208,10 +207,14 @@ class NeuralNetworkMonteCarloPolicy(Policy):
             calculates the loss based on NN values and monte carlo values
             performs back progagation to update the weights and biases
         """
-        loss = loss_fn(values, monte_carlo_values) # perform mean squared error        # print("loss: ", loss.item())
+        # print("Predicted values: ", values)
+        # print("Monte Carlo Values: ", monte_carlo_values)
+
+        loss = loss_fn(values, monte_carlo_values) # perform mean squared error       
         epoch_loss += loss.item()
         loss.backward()  # perform back propagation
         # print("loss: ", loss.item())
+        print(self.model.ln1.weight.grad)
         optimizer.step()  # update the weights and biases
         optimizer.zero_grad()  # zero the gradients
 

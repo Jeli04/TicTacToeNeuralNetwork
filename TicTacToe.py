@@ -76,7 +76,7 @@ class TicTacToe:
         self.turn = 1
 
     def get_current_state(self):
-        return self.board
+        return self.board.clone()
     
     def get_possible_actions(self):
         return torch.where(self.board == 0)[0]
@@ -125,8 +125,8 @@ class TicTacToe:
     
         # checks the diagonals
         if board[0] == board[4] == board[8] and board[0] != 0:
-            return self.board[0]
-        if board[2] == board[4] == board[6] and board[0] != 0:
+            return board[0]
+        if board[2] == board[4] == board[6] and board[2] != 0:
             return board[0]
         
         # checks for a draw

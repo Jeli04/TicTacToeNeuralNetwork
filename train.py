@@ -10,8 +10,13 @@ def train(episodes, lr, game, p1, p2):
         based on the monte carlo values of each action
     """
     print("Before training")
-    for p in p1.model.parameters():
-        print(p)
+    model_weights = p1.model.state_dict()
+
+    # Access the weight tensors for each layer
+    for layer_name, weights in model_weights.items():
+        if 'weight' in layer_name:
+            print(f'Layer: {layer_name}, Weights: {weights}')
+
     p2_is_model = False
     optimizer1 = torch.optim.SGD(p1.model.parameters(), lr=lr)
     if isinstance(p2, policies.NeuralNetworkMonteCarloPolicy):
@@ -31,7 +36,10 @@ def train(episodes, lr, game, p1, p2):
             # player 1's turn
             afterstate, value = p1.step(game)
             p1.action_to_value[tuple(afterstate)] = value  # stores the value of each action
+            # if episode % 10 == 0: print("Before appending in array: ", game.get_current_state())
             p1_afterstates.append(afterstate)
+            # if episode % 10 == 0: print("Afterstate after appending in array: ", afterstate)
+
             # print(self.env.get_current_state())
             if game.check_winner() != None: 
                 reward = game.check_winner()
@@ -41,10 +49,11 @@ def train(episodes, lr, game, p1, p2):
 
             # player 2's turn
             # afterstate, value = self.step(self.env, self.p2)
+            # if episode % 10 == 0: print(game.get_current_state())
             afterstate, value = p2.step(game)
             if p2_is_model:
                 p2.action_to_value[tuple(afterstate)] = value  # stores the value of each action
-                p2_afterstates.append(afterstate)
+            p2_afterstates.append(afterstate)
             # print(self.env.get_current_state())
             if game.check_winner() != None: 
                 reward = game.check_winner()
@@ -66,8 +75,13 @@ def train(episodes, lr, game, p1, p2):
         # print("\n")
 
         if episode % 100 == 0:
+            print("Reward", reward)
             p1_values_tensor = torch.cat(p1_values)
-            p1_mct_values_tensor = torch.cat(p1_mct_values)
+            # p1_mct_values_tensor = torch.cat(p1_mct_values)
+            p1_mct_values_tensor = torch.flip(torch.cat(p1_mct_values), dims=[0])
+            # print(p1_afterstates)
+            # print(p2_afterstates)
+            # print(p1_mct_values_tensor)
             epoch_loss = p1.update(p1_values_tensor, p1_mct_values_tensor, optimizer1, loss_fn, epoch_loss)
         p1.action_to_value.clear()
 
@@ -83,7 +97,7 @@ def train(episodes, lr, game, p1, p2):
         game.reset()  # reset the board
 
         if episode % 100 == 0 and episode != 0:
-            print("episode = %4d loss = %0.4f" % (episode, epoch_loss/episode))
+            print("episode = %4d loss = %0.4f" % (episode, epoch_loss/100))
             # print("Player 1 wins: ", p1_wins)
             # print("Player 2 wins: ", p2_wins)
             # print("Draws: ", draws)
@@ -95,9 +109,14 @@ def train(episodes, lr, game, p1, p2):
     print(len(p1.action_visits))
 
     print("After training")
-    for p in p1.model.parameters():
-        print(p)
+    model_weights = p1.model.state_dict()
+
+    # Access the weight tensors for each layer
+    for layer_name, weights in model_weights.items():
+        if 'weight' in layer_name:
+            print(f'Layer: {layer_name}, Weights: {weights}')
+
 
 lr = 0.001
 g = game.TicTacToe()
-train(episodes=1000, lr=lr, game=g, p1=policies.NeuralNetworkMonteCarloPolicy(g, 0.9, model(9, lr)), p2=policies.RandomPlayer())
+train(episodes=10000, lr=lr, game=g, p1=policies.NeuralNetworkMonteCarloPolicy(g, 0.9, model(9, lr)), p2=policies.RandomPlayer())
