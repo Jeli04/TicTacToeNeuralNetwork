@@ -5,6 +5,9 @@ In this project, I train a Neural Network using reinforcement techniques and the
 ## The Neural Network
 I used PyTorch to create a three-layer model consisting of three linear layers and three tanh activation layers. The optimizer I chose was SGD and the loss function was MSE. Upon multiple tests during training, I was able to choose a learning rate of 0.001 to be the best. The model is trained on 10000 episodes with evaluations done every 100 episodes. 
 
+## The Policies 
+For this project, I decided to go with two policies. The first policy is a RandomPolicy which randomly chooses a possible action. The second is a NeuralNetworkPolicy which utilizes the Neural Network. During training I tested a NeuralNetwork aginst a Random and a Neural Network against a Neural Network. 
+
 ## How it works
 The concept of Monte Carlo Estimations can be used to value different moves in a TicTacToe game. Throughout one game there can be at most 9 different states. Each state in a game can have different values for each of the two players. By giving a value to each state we can train our Neural Net to learn which action can lead to the best state. 
 
