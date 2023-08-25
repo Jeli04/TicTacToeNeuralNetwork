@@ -25,6 +25,53 @@ class RandomPlayer(Policy):
         game.update_board(np.random.choice(game.get_possible_actions(), size=1, replace=False))
         return game.get_current_state(), 0
 
+class MonteCarloPolicy(Policy):
+    def __init__(self, gamma):
+        self.action_to_value = {}
+        self.action_visits = {}
+        self.action_to_monte_carlo_value= {}
+        self.gamma = gamma
+
+    def step(self, game_state):
+        best_value = None
+        best_action = None
+        for action in game_state.get_possible_actions():
+            afterstate = game_state.get_possible_afterstate(action).tolist()
+            if tuple(afterstate) in self.action_to_monte_carlo_value:
+                action_value = self.action_to_monte_carlo_value[tuple(afterstate)]
+                if best_value == None or action_value > best_value:
+                    best_action = action
+                    best_value = action_value   
+
+        # if there is no record of the action in the dictionary
+        if best_action == None:
+            best_action = np.random.choice(game_state.get_possible_actions(), size=1, replace=False)
+        game_state.update_board(best_action)
+        afterstate = game_state.get_possible_afterstate(best_action)
+        n_visits = self.action_visits.get(tuple(afterstate.tolist()), 0) + 1
+        self.action_visits[tuple(afterstate.tolist())] = n_visits
+
+        return afterstate, best_value
+
+
+    def update(self, actions, max_reward):
+        G = 0
+        i = 0
+        # actions is a list
+        for index, action in enumerate(reversed(actions)):
+            N = self.action_visits[tuple(action.tolist())]
+            if index == 0: reward = max_reward
+            else: reward = 0
+            G = reward + self.gamma * G
+
+            old_value = None
+            if tuple(action) in self.action_to_monte_carlo_value:
+                old_value = self.action_to_monte_carlo_value[tuple(action)]
+                self.action_to_monte_carlo_value[tuple(action)] = torch.tensor([old_value + ((G-old_value)/N)], dtype=torch.float64)
+            else:
+                self.action_to_monte_carlo_value[tuple(action)] = torch.tensor([G/N], dtype=torch.float64)
+    
+
 class NeuralNetworkMonteCarloPolicy(Policy):
     def __init__(self, env, gamma, model):
         super().__init__(env)
@@ -73,7 +120,6 @@ class NeuralNetworkMonteCarloPolicy(Policy):
         G = 0
         i = 0
         # for action in actions:
-
         for index, action in enumerate(reversed(actions)):
             N = self.action_visits[tuple(action.tolist())]
             if index == 0: reward = max_reward
@@ -98,95 +144,6 @@ class NeuralNetworkMonteCarloPolicy(Policy):
 
         return player_mct
     
-
-    def train(self, episodes, lr):
-        """
-            performs episodes number of games and updates the neural network after each episode 
-            based on the monte carlo values of each action
-        """
-
-        """
-            Move training into its file
-            Modify the function to check if p2 is a model or not
-            Conduct training model vs random and model vs model
-        """
-
-
-
-        # print("Before training")
-        # for p in self.model.parameters():
-        #     print(p)
-        randomPlayer = RandomPlayer()
-        optimizer1 = torch.optim.SGD(self.model.parameters(), lr=lr)
-        optimizer2 = torch.optim.SGD(self.p2.parameters(), lr=lr)
-        loss_fn = nn.MSELoss()
-        p1_wins = 0
-        p2_wins = 0
-        draws = 0
-
-        for episode in range(episodes):
-            afterstates = []
-            while True:
-                # player 1's turn
-                afterstate, value = self.step(self.env, self.model)
-                self.action_to_value[tuple(afterstate)] = value # stores the value of each action
-                afterstates.append(afterstate)
-                # print(self.env.get_current_state())
-                if self.env.check_winner() != None: 
-                    reward = self.env.check_winner()
-                    # print(self.env.get_current_state())
-                    # print("Game over")
-                    break
-
-                # player 2's turn
-                # afterstate, value = self.step(self.env, self.p2)
-                afterstate = randomPlayer.step(self.env)
-                self.action_to_value[tuple(afterstate)] = value # stores the value of each action
-                afterstates.append(afterstate)
-                # print(self.env.get_current_state())
-                if self.env.check_winner() != None: 
-                    reward = self.env.check_winner()
-                    # print(self.env.get_current_state())
-                    # print("Game over")
-                    break
-
-            if reward == 1:
-                p1_wins+=1
-            elif reward == -1:
-                p2_wins+=1
-            else:
-                draws+=1
-                
-            # print("action to value: ", self.action_to_value)
-            p1_values, p2_values = self.split_actions_values(self.action_to_value)
-            # self.calculate_monte_carlo_values(p1_values, reward)
-            # self.calculate_monte_carlo_values(p2_values, reward)
-            # p1_mct_values, p2_mct_values = self.split_actions_values(self.action_to_monte_carlo_value)
-            p1_mct_values, p2_mct_values = self.calculate_monte_carlo_values(afterstates, reward)
-            # print(p1_values)
-            # print(p1_mct_values)
-
-            p1_values_tensor = torch.cat(p1_values)
-            p1_mct_values_tensor = torch.cat(p1_mct_values)
-            self.update(p1_values_tensor, p1_mct_values_tensor, optimizer1, loss_fn)
-
-            # p2_values_tensor = torch.cat(p2_values)
-            # p2_mct_values_tensor = torch.cat(p2_mct_values)
-            # self.update(p2_values_tensor, p2_mct_values_tensor, optimizer2, loss_fn)
-
-            self.env.reset()  # reset the board
-            self.action_to_value.clear()
-            # self.action_to_monte_carlo_value.clear()
-
-            # for p in self.model.parameters():
-            #     print(p)
-
-        print(len(self.action_to_monte_carlo_value))
-        print(self.action_to_monte_carlo_value)
-
-        print("Player 1 wins: ", p1_wins)
-        print("Player 2 wins: ", p2_wins)
-        print("Draws: ", draws)
 
     def split_actions_values(self, set):
         """
@@ -222,15 +179,3 @@ class NeuralNetworkMonteCarloPolicy(Policy):
         self.action_visits.clear()
 
         return epoch_loss
-
-
-#             # evaluate the policy
-#             if i % self.eval_ter == 0:
-#                 # evaluate the policy
-#                 print("Evaluation: ")
-#                 p1.eval()
-
-#                 # do a Monto Carlo Evaluation
-#                 pass
-
-#             print("Step: ", i)

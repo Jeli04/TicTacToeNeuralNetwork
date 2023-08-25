@@ -44,7 +44,7 @@ class TicTacToe:
             board = self.board
 
         # checks the rows
-        for i in range(3):
+        for i in range(0, 8, 3):
             if(board[i] == board[i+1] == board[i+2] and board[i] != 0):
                 return board[i]
             
@@ -60,9 +60,20 @@ class TicTacToe:
             return board[0]
         
         # checks for a draw
-        if len(torch.where(torch.tensor(board) == 0)[0]) == 0:
+        if len(torch.where(board == 0)[0]) == 0:
             return 0 
 
     def reset(self):
         self.board = torch.zeros(9, dtype=torch.double)
         self.turn = 1
+
+    def display_board(self):
+        symbols = []
+        for value in self.board:
+            if value == 0:
+                symbols.append(" ")
+            elif value == 1:
+                symbols.append("X")
+            elif value == -1:
+                symbols.append("O")
+        return symbols
