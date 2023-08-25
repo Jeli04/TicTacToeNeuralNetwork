@@ -1,6 +1,6 @@
 import policies
 import torch
-import TicTacToe as game
+import tictactoe as game
 import matplotlib.pyplot as plt
 import csv
 from torch import nn

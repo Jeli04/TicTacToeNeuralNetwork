@@ -1,6 +1,6 @@
 import torch
 import PySimpleGUI as sg
-from TicTacToe import TicTacToe
+from tictactoe import TicTacToe
 
 # model = torch.load("models/p1_mvm")
 # # param = torch.load("models/p1_parameters")
