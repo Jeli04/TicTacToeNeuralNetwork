@@ -16,6 +16,23 @@ image goes here
 The Neural Network takes in an input of a tensor of size 9 that represents the current state of the game and outputs an estimated value of that state. Throughout the training process, there is a dictionary of state-to-values that is constantly being updated based on each move in an episode. Based on the outcome of the episode, there will either be a win (1), loss (-1), or draw (0). This is factored into the calculations of a state when the Monte Carlo Value is updated. So during the evaluation step, the loss is calculated between the Neural Net's estimated values of the states from the most recent game to what is calculated and stored inside the dictionary. 
 
 ## The Results 
-Each  
+
+![alt text](https://github.com/Jeli04/TicTacToeNeuralNetwork/blob/main/images/rand_figure_1.png?raw=true)
+
+The results of the NeuralNetwork vs Random policies resutled with a win rate of almost 90% for the Neural Network policy, a roughly 9% win rate for the random policy and a 1% draw rate. At first the Neural Network would achieve win rates roughly around 50%, but than increased up to 80% until it plateaued around 90%. 
+
+<p float="left">
+ <img src="https://github.com/Jeli04/TicTacToeNeuralNetwork/blob/main/images/mvm_p1_figure_1.png?raw=true" width="45%" /> 
+ <img src="https://github.com/Jeli04/TicTacToeNeuralNetwork/blob/main/images/mvm_p2_figure_1.png?raw=true" width="45%" />
+</p>
+
+
+The results of the NeuralNetwork vs Neural Network polciies resulted with a roughly 8% win rate for player 1 and 5% win rate for player 2. Since TicTacToe is a game that geavily favors player 1 (the first move) the win rate started at almost 100% for player 1 while a near 0% for player 2. Around episodes 10000 to 20000 the win rates for both players would even up and reach around 50%. After this though the win rates for both would decrease while the draw rate greatly increased. This is most likely due to the fact that both models were the same architecture and evaluted its loss the same way leading to a matching win rate with a very high draw rate of almost 90% at the end. 
+
+![alt text](https://github.com/Jeli04/TicTacToeNeuralNetwork/blob/main/images/mvmct_figure_1.png?raw=true)
+
+The results of the NeuralNetwork vs Monte Carlo policies resulted with a 88% win rate for the Neural Network policy. The graph's shape is very similar to the Neural Network vs Random Policy.
+
+What I just described above are simply the win rates between each policies. These win rates don't depict how well the acutal model would perform against a real player. 
  
 
